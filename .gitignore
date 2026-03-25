@@ -1,0 +1,15 @@
+# Backups are redundant inside a Git repo — Git itself tracks history.
+# The backups/ folder is still created locally as a safety net, but
+# shouldn't be committed.
+backups/
+
+# Python
+__pycache__/
+*.pyc
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Harmonizer outputs (generated CSVs from the harmonize CLI command)
+*_harmonized.csv
