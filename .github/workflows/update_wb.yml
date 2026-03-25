@@ -1,0 +1,113 @@
+# ============================================================================
+# World Bank + IMF Auto-Update — Scheduled GitHub Actions Workflow
+# ============================================================================
+# Runs every 6 months (May 1 and Nov 1) to refresh classifications in the
+# master country list from both the World Bank API and IMF DataMapper API.
+# If changes are detected, it opens a pull request for manual review rather
+# than pushing directly to main.
+#
+# Can also be triggered manually via the Actions tab ("Run workflow" button).
+# ============================================================================
+
+name: Update Country Classifications
+
+on:
+  # ---- Scheduled: runs at midnight UTC on May 1 and Nov 1 ----
+  # Timed one month after the IMF WEO April and October releases,
+  # giving the APIs time to reflect the new data.
+  schedule:
+    - cron: "0 0 1 5 *"    # May 1st
+    - cron: "0 0 1 11 *"   # November 1st
+
+  # ---- Manual: click "Run workflow" in the Actions tab ----
+  workflow_dispatch:
+
+# ---- Permissions needed to create branches and open PRs ----
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  update-classifications:
+    runs-on: ubuntu-latest
+
+    steps:
+      # ------------------------------------------------------------------
+      # Step 1: Check out the repository
+      # ------------------------------------------------------------------
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # ------------------------------------------------------------------
+      # Step 2: Set up Python
+      # ------------------------------------------------------------------
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      # ------------------------------------------------------------------
+      # Step 3: Install dependencies (just pandas + openpyxl)
+      # ------------------------------------------------------------------
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      # ------------------------------------------------------------------
+      # Step 4: Run the update (hits both World Bank and IMF APIs)
+      # The CLI `update` command calls update_from_wb() and
+      # update_from_imf() sequentially, handles errors for each
+      # independently, and saves only if changes are detected.
+      # ------------------------------------------------------------------
+      - name: Run classification update
+        id: update
+        run: |
+          python country_harmonizer.py update --file MasterCountryList.XLSX 2>&1 | tee update_output.txt
+
+          # Check if the master file was actually modified
+          if git diff --quiet MasterCountryList.XLSX; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "No changes detected."
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+            echo "Changes detected — will open PR."
+          fi
+
+      # ------------------------------------------------------------------
+      # Step 5: Create a branch and open a PR (only if changes detected)
+      # This lets you review what changed before merging to main.
+      # ------------------------------------------------------------------
+      - name: Create Pull Request
+        if: steps.update.outputs.changed == 'true'
+        uses: peter-evans/create-pull-request@v6
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          branch: auto/classification-update-${{ github.run_number }}
+          commit-message: "chore: update country classifications (WB + IMF)"
+          title: "chore: country classification refresh (WB + IMF)"
+          body: |
+            ## Automated Classification Update
+
+            This PR was created by the scheduled GitHub Action.
+
+            **Data sources refreshed:**
+            - [World Bank API](https://api.worldbank.org/v2/country?format=json&per_page=300) → `wb_country`, `wb_region`, `wb_incomegroup`, `wb_lendingcategory`
+            - [IMF DataMapper API](https://www.imf.org/external/datamapper/api/v1/) → `region`, `income`
+
+            **What to check:**
+            - A timestamped backup was saved to `backups/` (gitignored)
+            - Full change details are in `country_harmonizer_changelog.json`
+
+            **Review checklist:**
+            - [ ] Spot-check a few changed rows in `MasterCountryList.XLSX`
+            - [ ] Verify no countries were accidentally dropped
+            - [ ] Merge when satisfied
+
+            <details>
+            <summary>Raw update output</summary>
+
+            ```
+            $(cat update_output.txt)
+            ```
+            </details>
+          labels: automated, data-update
+          delete-branch: true
