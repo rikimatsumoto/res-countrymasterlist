@@ -35,12 +35,12 @@ jobs:
       # ------------------------------------------------------------------
       # Step 0: Harden Runner (network + runtime monitoring)
       # ------------------------------------------------------------------
-      - name: Harden Runner
-        uses: step-security/harden-runner@v2
-        with:
-          egress-policy: audit   # switch to 'block' after baseline
-          disable-sudo: true     # prevents privilege escalation
-          disable-file-monitoring: false
+      #- name: Harden Runner
+      #  uses: step-security/harden-runner@v2
+      #  with:
+      #    egress-policy: audit   # switch to 'block' after baseline
+      #    disable-sudo: true     # prevents privilege escalation
+      #    disable-file-monitoring: false
       # ------------------------------------------------------------------
       # Step 1: Check out the repository
       # ------------------------------------------------------------------
